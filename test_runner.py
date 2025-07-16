@@ -66,11 +66,16 @@ def system_tests():
     cmd = "python -m pytest tests/test_integration.py -k 'root or health' -v"
     return run_command(cmd, "SYSTEM TESTS - Root and health endpoints")
 
+def connection_tests():
+    """Run agent connection tests."""
+    cmd = "python -m pytest tests/test_agent_connections.py -v"
+    return run_command(cmd, "AGENT CONNECTION TESTS - Task 4 functionality")
+
 def main():
     """Main test runner function."""
     parser = argparse.ArgumentParser(description="Test Runner for LangGraph Agent Management System")
     parser.add_argument("test_type", nargs="?", default="quick", 
-                       choices=["quick", "full", "workflow", "agent", "validation", "performance", "system"],
+                       choices=["quick", "full", "workflow", "agent", "validation", "performance", "system", "connections"],
                        help="Type of test to run (default: quick)")
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
     
@@ -87,7 +92,8 @@ def main():
         "agent": agent_tests,
         "validation": validation_tests,
         "performance": performance_tests,
-        "system": system_tests
+        "system": system_tests,
+        "connections": connection_tests
     }
     
     # Run the selected test

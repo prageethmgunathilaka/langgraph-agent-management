@@ -98,15 +98,23 @@ class WorkflowService(LoggerMixin):
         return workflow
     
     @handle_service_error
-    async def delete_workflow(self, workflow_id: str) -> bool:
+    async def delete_workflow(self, workflow_id: str, agent_service=None) -> bool:
         """Delete a workflow and all its agents."""
         workflow = self._workflows.get(workflow_id)
         if not workflow:
             return False
         
         try:
-            # In a real implementation, this would also delete all associated agents
-            # For now, we'll just remove the workflow
+            # Delete all associated agents first if agent_service is provided
+            if agent_service:
+                # Get all agents in this workflow (make a copy to avoid modification during iteration)
+                agent_ids = (await agent_service.get_workflow_agents(workflow_id)).copy()
+                
+                # Delete each agent (this will also clean up connections)
+                for agent_id in agent_ids:
+                    await agent_service.delete_agent(agent_id)
+            
+            # Now delete the workflow
             del self._workflows[workflow_id]
             
             log_workflow_event(workflow_id, "deleted", {

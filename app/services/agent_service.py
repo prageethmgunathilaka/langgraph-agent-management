@@ -160,6 +160,9 @@ class AgentService(LoggerMixin):
                 for other_agent_id, connections in self._agent_connections.items():
                     if agent_id in connections:
                         connections.remove(agent_id)
+                        # Update the other agent's connected_agents list
+                        if other_agent_id in self._agents:
+                            self._agents[other_agent_id].connected_agents = connections.copy()
                 
                 # Remove this agent's connections
                 del self._agent_connections[agent_id]
@@ -241,6 +244,14 @@ class AgentService(LoggerMixin):
         target_agent = self._agents.get(target_agent_id)
         
         if not agent or not target_agent:
+            return False
+        
+        # Check if agents are actually connected
+        agent_connections = self._agent_connections.get(agent_id, [])
+        target_connections = self._agent_connections.get(target_agent_id, [])
+        
+        if target_agent_id not in agent_connections and agent_id not in target_connections:
+            # Agents are not connected
             return False
         
         # Remove bidirectional connection

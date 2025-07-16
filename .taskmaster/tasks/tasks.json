@@ -100,7 +100,7 @@
         "id": 4,
         "title": "Implement Agent Connection Management",
         "description": "Develop functionality to connect agent nodes to other agents, enabling delegation and task spawning through internal service method calls within the existing AgentService",
-        "status": "in-progress",
+        "status": "done",
         "dependencies": [
           3
         ],
@@ -172,7 +172,7 @@
     ],
     "metadata": {
       "created": "2025-07-14T19:14:27.725Z",
-      "updated": "2025-07-16T16:09:53.848Z",
+      "updated": "2025-07-16T17:54:00.392Z",
       "description": "Tasks for master context"
     }
   }

@@ -66,7 +66,7 @@ async def get_workflow(workflow_id: str):
 async def delete_workflow(workflow_id: str):
     """Delete a workflow and all its agents."""
     try:
-        result = await workflow_service.delete_workflow(workflow_id)
+        result = await workflow_service.delete_workflow(workflow_id, agent_service)
         if not result:
             raise HTTPException(status_code=404, detail="Workflow not found")
         return {"message": f"Workflow {workflow_id} deleted successfully"}
@@ -129,6 +129,10 @@ async def connect_agents(agent_id: str, connection: AgentConnection):
     except HTTPException:
         raise
     except Exception as e:
+        # Import here to avoid circular imports
+        from app.utils.errors import AgentConnectionError
+        if isinstance(e, AgentConnectionError):
+            raise HTTPException(status_code=400, detail=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/agents/{agent_id}/disconnect", tags=["Agents"])
@@ -142,6 +146,10 @@ async def disconnect_agents(agent_id: str, connection: AgentConnection):
     except HTTPException:
         raise
     except Exception as e:
+        # Import here to avoid circular imports
+        from app.utils.errors import AgentConnectionError
+        if isinstance(e, AgentConnectionError):
+            raise HTTPException(status_code=400, detail=str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/agents/{agent_id}/connections", response_model=List[AgentResponse], tags=["Agents"])
