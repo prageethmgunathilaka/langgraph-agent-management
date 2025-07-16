@@ -1,0 +1,32 @@
+# Overview  
+i want to add langgraph agent management capability to this service. it should manage full lifecycle of agents.
+
+# Core Features 
+- create workflows identified by workflow id.
+- Create Langgraph agent nodes and add it to workflow by id. each agent has an agent id too.
+- agents can connect to any llm model or MCP server as needed.
+- Connect agents nodes to other agents so that main agents can spawn child agents and delegate tasks or operations as needed. 
+- keep track of agent list , their connections and their status and basic details
+- provide any specific agent details.
+- delete workflows by id. when deleted all of its agents will be deleted too.  
+
+# User Experience  
+- create workflow 
+- create main agents with a limit of agents that it can create.
+- main agents create list of tasks and delegate its tasks. it may create more main agents or child agents as needed. 
+
+# Development Roadmap  
+- develop & test & deploy ability create workflow creation and deleteion and deploy and test it.
+- develop & test & deploy ability create agent creation into workflows.
+- develop & test & deploy ability to link agent nodes each other.
+- develop & test & deploy ability delete workflows with its agents.
+- develop & test & deploy ability to delete agents
+- develop & test & deploy ability for main agents to spawn other child agents with some limit specified by the api parameter. main agent should have reasoning ability to list down the tasks that should be deletegated. it should prepare the prompt. 
+
+# Logical Dependency Chain
+as specified above.
+
+# Risks and Mitigations  
+- memory out of bound
+- too many cpu usages for complex tasks.
+- overuse of tokens
