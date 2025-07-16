@@ -81,6 +81,8 @@ class AgentResponse(AgentBase):
     workflow_id: str = Field(..., description="Workflow ID this agent belongs to")
     parent_agent_id: Optional[str] = Field(None, description="Parent agent ID (for child agents)")
     status: AgentStatusEnum = Field(AgentStatusEnum.IDLE, description="Agent status")
+    status_description: str = Field("Agent is idle", description="Detailed description of current status")
+    status_updated_at: datetime = Field(default_factory=datetime.now, description="When status was last updated")
     created_at: datetime = Field(default_factory=datetime.now, description="Agent creation timestamp")
     last_activity: Optional[datetime] = Field(None, description="Last activity timestamp")
     connected_agents: List[str] = Field(default_factory=list, description="List of connected agent IDs")
@@ -111,6 +113,11 @@ class StatusBroadcast(BaseModel):
     """Status broadcast model."""
     status: AgentStatusEnum = Field(..., description="New agent status")
     message: str = Field("", description="Optional message about the status change")
+
+class AgentStatusUpdate(BaseModel):
+    """Agent status update model."""
+    status: AgentStatusEnum = Field(..., description="New agent status")
+    description: Optional[str] = Field(None, description="Detailed description of the status change")
 
 class AgentStatus(BaseModel):
     """Agent status model."""

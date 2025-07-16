@@ -71,11 +71,16 @@ def connection_tests():
     cmd = "python -m pytest tests/test_agent_connections.py -v"
     return run_command(cmd, "AGENT CONNECTION TESTS - Task 4 functionality")
 
+def status_tests():
+    """Run agent status tracking tests."""
+    cmd = "python -m pytest tests/test_agent_status_tracking.py -v"
+    return run_command(cmd, "AGENT STATUS TRACKING TESTS - Task 5 functionality")
+
 def main():
     """Main test runner function."""
     parser = argparse.ArgumentParser(description="Test Runner for LangGraph Agent Management System")
     parser.add_argument("test_type", nargs="?", default="quick", 
-                       choices=["quick", "full", "workflow", "agent", "validation", "performance", "system", "connections"],
+                       choices=["quick", "full", "workflow", "agent", "validation", "performance", "system", "connections", "status"],
                        help="Type of test to run (default: quick)")
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose output")
     
@@ -93,7 +98,8 @@ def main():
         "validation": validation_tests,
         "performance": performance_tests,
         "system": system_tests,
-        "connections": connection_tests
+        "connections": connection_tests,
+        "status": status_tests
     }
     
     # Run the selected test

@@ -4,7 +4,7 @@ import uuid
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from app.models.schemas import (
-    AgentCreate, AgentResponse, AgentList, AgentStatus, 
+    AgentCreate, AgentResponse, AgentList, AgentStatus, AgentStatusUpdate,
     AgentType, AgentStatusEnum, Task, TaskCreate
 )
 from app.utils.logger import LoggerMixin, log_agent_event
@@ -59,6 +59,8 @@ class AgentService(LoggerMixin):
             mcp_connections=agent_data.mcp_connections,
             max_child_agents=agent_data.max_child_agents,
             status=AgentStatusEnum.IDLE,
+            status_description="Agent created and ready to receive tasks",
+            status_updated_at=datetime.now(),
             created_at=datetime.now(),
             last_activity=None,
             connected_agents=[],
@@ -362,23 +364,53 @@ class AgentService(LoggerMixin):
         return child_agent
     
     @handle_service_error
-    async def update_agent_status(self, agent_id: str, status: AgentStatusEnum) -> bool:
-        """Update agent status."""
+    async def update_agent_status(self, agent_id: str, status_update: AgentStatusUpdate) -> Optional[AgentResponse]:
+        """Update an agent's status with description."""
         agent = self._agents.get(agent_id)
         if not agent:
-            return False
+            return None
         
         old_status = agent.status
-        agent.status = status
+        old_description = agent.status_description
+        
+        # Update status and description
+        agent.status = status_update.status
+        agent.status_updated_at = datetime.now()
         agent.last_activity = datetime.now()
         
-        log_agent_event(agent_id, "status_changed", {
-            "old_status": old_status,
-            "new_status": status
+        # Set description based on status if not provided
+        if status_update.description:
+            agent.status_description = status_update.description
+        else:
+            # Default descriptions based on status
+            default_descriptions = {
+                AgentStatusEnum.IDLE: "Agent is idle and ready for tasks",
+                AgentStatusEnum.RUNNING: "Agent is actively processing tasks",
+                AgentStatusEnum.PAUSED: "Agent is paused and not processing tasks",
+                AgentStatusEnum.ERROR: "Agent encountered an error",
+                AgentStatusEnum.COMPLETED: "Agent has completed all assigned tasks"
+            }
+            agent.status_description = default_descriptions.get(
+                status_update.status, 
+                f"Agent status changed to {status_update.status.value}"
+            )
+        
+        log_agent_event(agent_id, "status_updated", {
+            "old_status": old_status.value,
+            "new_status": status_update.status.value,
+            "old_description": old_description,
+            "new_description": agent.status_description
         })
         
-        self.logger.info(f"Updated agent {agent_id} status: {old_status} -> {status}")
-        return True
+        self.logger.info(f"Updated agent {agent_id} status: {old_status} -> {status_update.status} | {agent.status_description}")
+        return agent
+    
+    @handle_service_error
+    async def update_agent_status_simple(self, agent_id: str, status: AgentStatusEnum) -> bool:
+        """Update agent status (backward compatibility method)."""
+        status_update = AgentStatusUpdate(status=status, description=None)
+        result = await self.update_agent_status(agent_id, status_update)
+        return result is not None
     
     @handle_service_error
     async def assign_task(self, agent_id: str, task: Task) -> bool:

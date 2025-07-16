@@ -5,7 +5,7 @@ from typing import List, Optional
 from app.models.schemas import (
     WorkflowCreate, WorkflowResponse, WorkflowList,
     AgentCreate, AgentResponse, AgentList,
-    AgentConnection, AgentStatus, TaskDelegation, TaskCompletion, StatusBroadcast, TaskCreate
+    AgentConnection, AgentStatus, AgentStatusUpdate, TaskDelegation, TaskCompletion, StatusBroadcast, TaskCreate
 )
 from app.services.workflow_service import WorkflowService
 from app.services.agent_service import AgentService
@@ -169,6 +169,19 @@ async def get_agent_status(agent_id: str):
         if not status:
             raise HTTPException(status_code=404, detail="Agent not found")
         return status
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.put("/agents/{agent_id}/status", response_model=AgentResponse, tags=["Agents"])
+async def update_agent_status(agent_id: str, status_update: AgentStatusUpdate):
+    """Update agent status with description."""
+    try:
+        agent = await agent_service.update_agent_status(agent_id, status_update)
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent not found")
+        return agent
     except HTTPException:
         raise
     except Exception as e:
