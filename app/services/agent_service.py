@@ -1,11 +1,12 @@
 """Agent service for managing LangGraph agents."""
 
 import uuid
+import asyncio
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from app.models.schemas import (
     AgentCreate, AgentResponse, AgentList, AgentStatus, AgentStatusUpdate,
-    AgentType, AgentStatusEnum, Task, TaskCreate
+    AgentType, AgentStatusEnum, Task, TaskCreate, Agent
 )
 from app.utils.logger import LoggerMixin, log_agent_event
 from app.utils.config import get_settings
@@ -22,71 +23,432 @@ from app.utils.errors import (
 class AgentService(LoggerMixin):
     """Service for managing LangGraph agents."""
     
-    def __init__(self):
+    def __init__(self, workflow_service=None):
         # In-memory storage for MVP (would be replaced with database)
-        self._agents: Dict[str, AgentResponse] = {}
+        self._agents: Dict[str, Agent] = {}
         self._agent_connections: Dict[str, List[str]] = {}  # agent_id -> [connected_agent_ids]
         self._workflow_agents: Dict[str, List[str]] = {}  # workflow_id -> [agent_ids]
         self.settings = get_settings()
+        self.workflow_service = workflow_service
         self.logger.info("AgentService initialized")
     
     @handle_service_error
     async def create_agent(self, workflow_id: str, agent_data: AgentCreate) -> AgentResponse:
-        """Create a new agent in a workflow."""
+        """Create a new agent within a workflow."""
+        # Validate workflow exists (only if workflow_service is available)
+        if self.workflow_service and not self.workflow_service.get_workflow(workflow_id):
+            raise ValueError(f"Workflow {workflow_id} not found")
+        
+        # Generate unique agent ID
         agent_id = str(uuid.uuid4())
         
-        # Check workflow agent limit
-        current_agents = len(self._workflow_agents.get(workflow_id, []))
-        if current_agents >= self.settings.max_agents_per_workflow:
-            raise AgentLimitExceededError(
-                "Workflow agents", 
-                current_agents, 
-                self.settings.max_agents_per_workflow
-            )
-        
-        # Initialize empty tasks list for future use
-        initial_tasks = []
-        
-        # Create new agent
-        agent = AgentResponse(
+        # Create agent with enhanced configuration
+        agent = Agent(
             id=agent_id,
             workflow_id=workflow_id,
-            parent_agent_id=None,  # Fixed: Added missing parameter
             name=agent_data.name,
             description=agent_data.description,
             agent_type=agent_data.agent_type,
-            llm_config=agent_data.llm_config,
-            mcp_connections=agent_data.mcp_connections,
-            max_child_agents=agent_data.max_child_agents,
             status=AgentStatusEnum.IDLE,
             status_description="Agent created and ready to receive tasks",
-            status_updated_at=datetime.now(),
             created_at=datetime.now(),
-            last_activity=None,
-            connected_agents=[],
+            last_activity=datetime.now(),
+            tasks=[],
             child_agents=[],
-            tasks=initial_tasks
+            parent_agent_id=None,
+            connected_agents=[],
+            capabilities=agent_data.capabilities or [],
+            config=agent_data.config or {},
+            llm_config=agent_data.llm_config,
+            max_child_agents=agent_data.max_child_agents
         )
         
         # Store agent
         self._agents[agent_id] = agent
         
-        # Add to workflow
+        # Add to workflow agents
         if workflow_id not in self._workflow_agents:
             self._workflow_agents[workflow_id] = []
         self._workflow_agents[workflow_id].append(agent_id)
         
-        # Initialize connections
+        # Initialize agent connections
         self._agent_connections[agent_id] = []
         
+        # Log creation
         log_agent_event(agent_id, "created", {
             "workflow_id": workflow_id,
-            "name": agent.name,
-            "type": agent.agent_type
+            "agent_type": agent_data.agent_type,
+            "capabilities": agent_data.capabilities
         })
         
-        self.logger.info(f"Created agent: {agent_id} in workflow: {workflow_id}")
-        return agent
+        self.logger.info(f"Created agent {agent_id} in workflow {workflow_id}")
+        
+        return self._agent_to_response(agent)
+    
+    def _agent_to_response(self, agent: Agent) -> AgentResponse:
+        """Convert Agent model to AgentResponse."""
+        return AgentResponse(
+            id=agent.id,
+            workflow_id=agent.workflow_id,
+            name=agent.name,
+            description=agent.description,
+            agent_type=agent.agent_type,
+            llm_config=agent.llm_config,
+            mcp_connections=[],  # TODO: Add MCP connections support
+            max_child_agents=agent.max_child_agents,
+            parent_agent_id=agent.parent_agent_id,
+            status=agent.status,
+            status_description=agent.status_description,
+            status_updated_at=agent.status_updated_at,
+            created_at=agent.created_at,
+            last_activity=agent.last_activity,
+            connected_agents=agent.connected_agents,
+            child_agents=agent.child_agents,
+            tasks=agent.tasks,
+            capabilities=agent.capabilities,
+            config=agent.config
+        )
+
+    @handle_service_error
+    async def execute_agent_task(self, agent_id: str, task_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute a task using the specified agent with intelligence level support."""
+        agent = self._agents.get(agent_id)
+        if not agent:
+            raise ValueError(f"Agent {agent_id} not found")
+        
+        # Update agent status
+        agent.status = AgentStatusEnum.BUSY
+        agent.last_activity = datetime.now()
+        
+        try:
+            # Extract task parameters
+            action = task_data.get("action", "")
+            inputs = task_data.get("inputs", {})
+            step_context = task_data.get("step_context", {})
+            intelligence_level = task_data.get("intelligence_level", "basic")
+            
+            # Log task execution start
+            log_agent_event(agent_id, "task_execution_started", {
+                "action": action,
+                "intelligence_level": intelligence_level,
+                "step_id": step_context.get("step_id", "unknown")
+            })
+            
+            # Execute based on agent type
+            result = await self._execute_by_agent_type(agent, action, inputs, step_context, intelligence_level)
+            
+            # Update agent status
+            agent.status = AgentStatusEnum.IDLE
+            agent.last_activity = datetime.now()
+            
+            # Log successful completion
+            log_agent_event(agent_id, "task_execution_completed", {
+                "action": action,
+                "result_keys": list(result.keys()) if isinstance(result, dict) else "non_dict_result"
+            })
+            
+            self.logger.info(f"Agent {agent_id} completed task: {action}")
+            
+            return result
+            
+        except Exception as e:
+            # Update agent status on error
+            agent.status = AgentStatusEnum.ERROR
+            agent.last_activity = datetime.now()
+            
+            # Log error
+            log_agent_event(agent_id, "task_execution_failed", {
+                "action": action,
+                "error": str(e)
+            })
+            
+            self.logger.error(f"Agent {agent_id} task execution failed: {e}")
+            raise
+    
+    async def _execute_by_agent_type(self, 
+                                   agent: Agent, 
+                                   action: str, 
+                                   inputs: Dict[str, Any], 
+                                   step_context: Dict[str, Any],
+                                   intelligence_level: str) -> Dict[str, Any]:
+        """Execute task based on agent type."""
+        agent_type = agent.agent_type
+        
+        if agent_type == "api_agent":
+            return await self._execute_api_task(agent, action, inputs, step_context, intelligence_level)
+        elif agent_type == "data_agent":
+            return await self._execute_data_task(agent, action, inputs, step_context, intelligence_level)
+        elif agent_type == "file_agent":
+            return await self._execute_file_task(agent, action, inputs, step_context, intelligence_level)
+        elif agent_type == "notification_agent":
+            return await self._execute_notification_task(agent, action, inputs, step_context, intelligence_level)
+        else:
+            # General agent - basic task execution
+            return await self._execute_general_task(agent, action, inputs, step_context, intelligence_level)
+    
+    async def _execute_api_task(self, 
+                              agent: Agent, 
+                              action: str, 
+                              inputs: Dict[str, Any], 
+                              step_context: Dict[str, Any],
+                              intelligence_level: str) -> Dict[str, Any]:
+        """Execute API-related tasks."""
+        import aiohttp
+        
+        try:
+            method = inputs.get("method", "GET").upper()
+            url = inputs.get("url", "")
+            headers = inputs.get("headers", {})
+            data = inputs.get("data", {})
+            timeout = inputs.get("timeout", 30)
+            
+            if not url:
+                raise ValueError("URL is required for API tasks")
+            
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=timeout)) as session:
+                if method == "GET":
+                    async with session.get(url, headers=headers) as response:
+                        result = await response.json()
+                elif method == "POST":
+                    async with session.post(url, headers=headers, json=data) as response:
+                        result = await response.json()
+                elif method == "PUT":
+                    async with session.put(url, headers=headers, json=data) as response:
+                        result = await response.json()
+                elif method == "DELETE":
+                    async with session.delete(url, headers=headers) as response:
+                        result = await response.json()
+                else:
+                    raise ValueError(f"Unsupported HTTP method: {method}")
+                
+                return {
+                    "status": "success",
+                    "status_code": response.status,
+                    "data": result,
+                    "headers": dict(response.headers)
+                }
+                
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+                "action": action
+            }
+    
+    async def _execute_data_task(self, 
+                               agent: Agent, 
+                               action: str, 
+                               inputs: Dict[str, Any], 
+                               step_context: Dict[str, Any],
+                               intelligence_level: str) -> Dict[str, Any]:
+        """Execute data processing tasks."""
+        try:
+            if action == "transform":
+                data = inputs.get("data", {})
+                transformation = inputs.get("transformation", "")
+                
+                # Simple data transformation examples
+                if transformation == "uppercase":
+                    result = {k: v.upper() if isinstance(v, str) else v for k, v in data.items()}
+                elif transformation == "filter_empty":
+                    result = {k: v for k, v in data.items() if v}
+                elif transformation == "extract_keys":
+                    keys = inputs.get("keys", [])
+                    result = {k: data.get(k) for k in keys if k in data}
+                else:
+                    result = data
+                
+                return {
+                    "status": "success",
+                    "data": result,
+                    "transformation": transformation
+                }
+                
+            elif action == "validate":
+                data = inputs.get("data", {})
+                schema = inputs.get("schema", {})
+                
+                # Simple validation
+                valid = all(key in data for key in schema.get("required", []))
+                
+                return {
+                    "status": "success",
+                    "valid": valid,
+                    "data": data
+                }
+                
+            else:
+                return {
+                    "status": "error",
+                    "error": f"Unknown data action: {action}"
+                }
+                
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+                "action": action
+            }
+    
+    async def _execute_file_task(self, 
+                               agent: Agent, 
+                               action: str, 
+                               inputs: Dict[str, Any], 
+                               step_context: Dict[str, Any],
+                               intelligence_level: str) -> Dict[str, Any]:
+        """Execute file operation tasks."""
+        import os
+        import json
+        
+        try:
+            if action == "read":
+                file_path = inputs.get("file_path", "")
+                if not file_path or not os.path.exists(file_path):
+                    raise ValueError(f"File not found: {file_path}")
+                
+                with open(file_path, 'r') as f:
+                    content = f.read()
+                
+                return {
+                    "status": "success",
+                    "content": content,
+                    "file_path": file_path
+                }
+                
+            elif action == "write":
+                file_path = inputs.get("file_path", "")
+                content = inputs.get("content", "")
+                
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                with open(file_path, 'w') as f:
+                    f.write(content)
+                
+                return {
+                    "status": "success",
+                    "file_path": file_path,
+                    "bytes_written": len(content.encode())
+                }
+                
+            elif action == "json_read":
+                file_path = inputs.get("file_path", "")
+                if not file_path or not os.path.exists(file_path):
+                    raise ValueError(f"File not found: {file_path}")
+                
+                with open(file_path, 'r') as f:
+                    data = json.load(f)
+                
+                return {
+                    "status": "success",
+                    "data": data,
+                    "file_path": file_path
+                }
+                
+            else:
+                return {
+                    "status": "error",
+                    "error": f"Unknown file action: {action}"
+                }
+                
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+                "action": action
+            }
+    
+    async def _execute_notification_task(self, 
+                                       agent: Agent, 
+                                       action: str, 
+                                       inputs: Dict[str, Any], 
+                                       step_context: Dict[str, Any],
+                                       intelligence_level: str) -> Dict[str, Any]:
+        """Execute notification tasks."""
+        try:
+            if action == "log":
+                message = inputs.get("message", "")
+                level = inputs.get("level", "info")
+                
+                if level == "error":
+                    self.logger.error(f"Agent notification: {message}")
+                elif level == "warning":
+                    self.logger.warning(f"Agent notification: {message}")
+                else:
+                    self.logger.info(f"Agent notification: {message}")
+                
+                return {
+                    "status": "success",
+                    "message": message,
+                    "level": level
+                }
+                
+            elif action == "email":
+                # Placeholder for email notification
+                recipient = inputs.get("recipient", "")
+                subject = inputs.get("subject", "")
+                body = inputs.get("body", "")
+                
+                # In a real implementation, this would send an email
+                self.logger.info(f"Email notification: {recipient} - {subject}")
+                
+                return {
+                    "status": "success",
+                    "recipient": recipient,
+                    "subject": subject,
+                    "sent": True
+                }
+                
+            else:
+                return {
+                    "status": "error",
+                    "error": f"Unknown notification action: {action}"
+                }
+                
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+                "action": action
+            }
+    
+    async def _execute_general_task(self, 
+                                  agent: Agent, 
+                                  action: str, 
+                                  inputs: Dict[str, Any], 
+                                  step_context: Dict[str, Any],
+                                  intelligence_level: str) -> Dict[str, Any]:
+        """Execute general tasks."""
+        try:
+            if action == "delay":
+                delay_seconds = inputs.get("seconds", 1)
+                await asyncio.sleep(delay_seconds)
+                
+                return {
+                    "status": "success",
+                    "action": "delay",
+                    "seconds": delay_seconds
+                }
+                
+            elif action == "echo":
+                message = inputs.get("message", "")
+                
+                return {
+                    "status": "success",
+                    "action": "echo",
+                    "message": message
+                }
+                
+            else:
+                return {
+                    "status": "error",
+                    "error": f"Unknown general action: {action}"
+                }
+                
+        except Exception as e:
+            return {
+                "status": "error",
+                "error": str(e),
+                "action": action
+            }
     
     @handle_service_error
     async def get_agent(self, agent_id: str) -> Optional[AgentResponse]:
@@ -99,7 +461,7 @@ class AgentService(LoggerMixin):
         agent.connected_agents = self._agent_connections.get(agent_id, [])
         
         log_agent_event(agent_id, "retrieved")
-        return agent
+        return self._agent_to_response(agent)
     
     @handle_service_error
     async def list_agents(self, workflow_id: str) -> AgentList:
@@ -140,7 +502,7 @@ class AgentService(LoggerMixin):
         
         log_agent_event(agent_id, "updated", updates)
         self.logger.info(f"Updated agent: {agent_id}")
-        return agent
+        return self._agent_to_response(agent)
     
     @handle_service_error
     async def delete_agent(self, agent_id: str) -> bool:
@@ -295,7 +657,7 @@ class AgentService(LoggerMixin):
                 connected_agents.append(connected_agent)
         
         self.logger.info(f"Retrieved {len(connected_agents)} connected agents for: {agent_id}")
-        return connected_agents
+        return [self._agent_to_response(a) for a in connected_agents]
     
     @handle_service_error
     async def get_agent_status(self, agent_id: str) -> Optional[AgentStatus]:
@@ -403,7 +765,7 @@ class AgentService(LoggerMixin):
         })
         
         self.logger.info(f"Updated agent {agent_id} status: {old_status} -> {status_update.status} | {agent.status_description}")
-        return agent
+        return self._agent_to_response(agent)
     
     @handle_service_error
     async def update_agent_status_simple(self, agent_id: str, status: AgentStatusEnum) -> bool:

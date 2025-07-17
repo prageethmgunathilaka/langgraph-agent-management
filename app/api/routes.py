@@ -1,20 +1,22 @@
 """API routes for LangGraph Agent Management System."""
 
-from fastapi import APIRouter, HTTPException, Depends
-from typing import List, Optional
+from fastapi import APIRouter, HTTPException, Depends, status
+from typing import List, Optional, Dict, Any
 from app.models.schemas import (
     WorkflowCreate, WorkflowResponse, WorkflowList,
-    AgentCreate, AgentResponse, AgentList,
-    AgentConnection, AgentStatus, AgentStatusUpdate, TaskDelegation, TaskCompletion, StatusBroadcast, TaskCreate
+    AgentCreate, AgentResponse, AgentList, AgentConnection, AgentStatusUpdate,
+    TaskCreate, Task, TaskUpdate
 )
 from app.services.workflow_service import WorkflowService
 from app.services.agent_service import AgentService
+from app.services.task_service import TaskService, IntelligenceLevel
 
 router = APIRouter()
 
 # Initialize services
 workflow_service = WorkflowService()
-agent_service = AgentService()
+agent_service = AgentService(workflow_service=workflow_service)
+task_service = TaskService(agent_service=agent_service)
 
 # Root endpoint
 @router.get("/", tags=["System"])
@@ -161,7 +163,7 @@ async def get_agent_connections(agent_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/agents/{agent_id}/status", response_model=AgentStatus, tags=["Agents"])
+@router.get("/agents/{agent_id}/status", response_model=Dict[str, Any], tags=["Agents"])
 async def get_agent_status(agent_id: str):
     """Get agent status and details."""
     try:
@@ -196,7 +198,7 @@ async def spawn_child_agent(agent_id: str, child_agent: AgentCreate):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/agents/{agent_id}/delegate", tags=["Agents"])
-async def delegate_task(agent_id: str, delegation: TaskDelegation):
+async def delegate_task(agent_id: str, delegation: Dict[str, Any]):
     """Delegate a task from one agent to another connected agent."""
     try:
         # For this endpoint, we need to find the task first
@@ -208,19 +210,19 @@ async def delegate_task(agent_id: str, delegation: TaskDelegation):
         
         # This is a simplified implementation - in production you'd retrieve the actual task
         mock_task = Task(
-            id=delegation.task_id,
+            id=delegation.get("task_id", ""),
             title="Delegated Task",
             description="Task delegated between agents",
             status="pending",
             priority=1,
             created_at=datetime.now(),
-            assigned_to=delegation.target_agent_id
+            assigned_to=delegation.get("target_agent_id", "")
         )
         
-        result = await agent_service.delegate_task(agent_id, delegation.target_agent_id, mock_task)
+        result = await agent_service.delegate_task(agent_id, delegation.get("target_agent_id", ""), mock_task)
         if not result:
             raise HTTPException(status_code=404, detail="One or both agents not found")
-        return {"message": f"Task {delegation.task_id} delegated from {agent_id} to {delegation.target_agent_id}"}
+        return {"message": f"Task {delegation.get('task_id', '')} delegated from {agent_id} to {delegation.get('target_agent_id', '')}"}
     except HTTPException:
         raise
     except Exception as e:
@@ -240,23 +242,23 @@ async def spawn_child_task(agent_id: str, child_agent_id: str, task: TaskCreate)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/agents/{agent_id}/complete-task", tags=["Agents"])
-async def complete_task(agent_id: str, completion: TaskCompletion):
+async def complete_task(agent_id: str, completion: Dict[str, Any]):
     """Mark a task as completed and notify connected agents."""
     try:
-        result = await agent_service.notify_task_completion(agent_id, completion.task_id, completion.result)
+        result = await agent_service.notify_task_completion(agent_id, completion.get("task_id", ""), completion.get("result", ""))
         if not result:
             raise HTTPException(status_code=404, detail="Agent or task not found")
-        return {"message": f"Task {completion.task_id} completed by agent {agent_id}"}
+        return {"message": f"Task {completion.get('task_id', '')} completed by agent {agent_id}"}
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/agents/{agent_id}/broadcast-status", tags=["Agents"])
-async def broadcast_status(agent_id: str, status_broadcast: StatusBroadcast):
+async def broadcast_status(agent_id: str, status_broadcast: Dict[str, Any]):
     """Broadcast status change to all connected agents."""
     try:
-        result = await agent_service.broadcast_status_change(agent_id, status_broadcast.status, status_broadcast.message)
+        result = await agent_service.broadcast_status_change(agent_id, status_broadcast.get("status", ""), status_broadcast.get("message", ""))
         if not result:
             raise HTTPException(status_code=404, detail="Agent not found")
         return {"message": f"Status change broadcasted by agent {agent_id}"}
@@ -264,3 +266,173 @@ async def broadcast_status(agent_id: str, status_broadcast: StatusBroadcast):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) 
+
+# Task Management and Workflow Planning Endpoints
+
+@router.post("/workflows/plan", response_model=Dict[str, Any])
+async def create_workflow_plan(
+    request_data: Dict[str, Any],
+    task_service: TaskService = Depends(lambda: task_service)
+):
+    """Create a structured workflow plan from a complex request using LLM."""
+    try:
+        request_text = request_data.get("request", "")
+        context = request_data.get("context", {})
+        
+        if not request_text:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Request text is required"
+            )
+        
+        workflow_plan = await task_service.create_workflow_from_request(request_text, context)
+        
+        return {
+            "workflow_id": workflow_plan.workflow_id,
+            "title": workflow_plan.title,
+            "description": workflow_plan.description,
+            "steps": workflow_plan.steps,
+            "success_criteria": workflow_plan.success_criteria,
+            "failure_handling": workflow_plan.failure_handling,
+            "estimated_duration": workflow_plan.estimated_duration,
+            "created_at": workflow_plan.created_at.isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create workflow plan: {str(e)}"
+        )
+
+@router.post("/workflows/{workflow_id}/execute", response_model=Dict[str, Any])
+async def execute_workflow(
+    workflow_id: str,
+    execution_params: Dict[str, Any],
+    task_service: TaskService = Depends(lambda: task_service)
+):
+    """Execute a workflow plan with specified intelligence level."""
+    try:
+        intelligence_level_str = execution_params.get("intelligence_level", "basic")
+        
+        # Convert string to enum
+        intelligence_level = IntelligenceLevel(intelligence_level_str)
+        
+        result = await task_service.execute_workflow(workflow_id, intelligence_level)
+        
+        return result
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid parameters: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to execute workflow: {str(e)}"
+        )
+
+@router.get("/workflows/{workflow_id}/status", response_model=Dict[str, Any])
+async def get_workflow_status(
+    workflow_id: str,
+    task_service: TaskService = Depends(lambda: task_service)
+):
+    """Get detailed workflow execution status."""
+    try:
+        status_info = task_service.get_workflow_status(workflow_id)
+        
+        if status_info.get("status") == "not_found":
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Workflow {workflow_id} not found"
+            )
+        
+        return status_info
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get workflow status: {str(e)}"
+        )
+
+@router.get("/tasks/{task_id}/status", response_model=Dict[str, Any])
+async def get_task_status(
+    task_id: str,
+    task_service: TaskService = Depends(lambda: task_service)
+):
+    """Get detailed task execution status."""
+    try:
+        status_info = await task_service.get_task_status(task_id)
+        
+        if status_info.get("status") == "not_found":
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Task {task_id} not found"
+            )
+        
+        return status_info
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get task status: {str(e)}"
+        )
+
+@router.delete("/tasks/{task_id}", response_model=Dict[str, Any])
+async def cancel_task(
+    task_id: str,
+    task_service: TaskService = Depends(lambda: task_service)
+):
+    """Cancel a running task."""
+    try:
+        success = await task_service.cancel_task(task_id)
+        
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Task {task_id} not found or not running"
+            )
+        
+        return {"message": f"Task {task_id} cancelled successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to cancel task: {str(e)}"
+        )
+
+@router.get("/system/metrics", response_model=Dict[str, Any])
+async def get_system_metrics(
+    task_service: TaskService = Depends(lambda: task_service)
+):
+    """Get system performance metrics including LLM usage."""
+    try:
+        metrics = task_service.get_system_metrics()
+        return metrics
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get system metrics: {str(e)}"
+        )
+
+@router.get("/llm/usage", response_model=Dict[str, Any])
+async def get_llm_usage_stats(
+    task_service: TaskService = Depends(lambda: task_service)
+):
+    """Get LLM usage statistics and costs."""
+    try:
+        stats = task_service.get_llm_usage_stats()
+        return stats
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get LLM usage stats: {str(e)}"
+        ) 

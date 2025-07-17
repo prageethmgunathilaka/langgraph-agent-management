@@ -9,10 +9,16 @@ class AgentType(str, Enum):
     """Agent type enumeration."""
     MAIN = "main"
     CHILD = "child"
+    API_AGENT = "api_agent"
+    DATA_AGENT = "data_agent"
+    FILE_AGENT = "file_agent"
+    NOTIFICATION_AGENT = "notification_agent"
+    GENERAL_AGENT = "general_agent"
 
 class AgentStatusEnum(str, Enum):
     """Agent status enumeration."""
     IDLE = "idle"
+    BUSY = "busy"
     RUNNING = "running"
     PAUSED = "paused"
     ERROR = "error"
@@ -66,14 +72,36 @@ class AgentBase(BaseModel):
     """Base agent model."""
     name: str = Field(..., description="Agent name")
     description: Optional[str] = Field(None, description="Agent description")
-    agent_type: AgentType = Field(AgentType.MAIN, description="Agent type")
-    llm_config: LLMConfig = Field(..., description="LLM configuration")
+    agent_type: str = Field("general_agent", description="Agent type")
+    llm_config: Optional[LLMConfig] = Field(None, description="LLM configuration")
     mcp_connections: List[MCPConnection] = Field(default_factory=list, description="MCP server connections")
     max_child_agents: int = Field(5, ge=0, description="Maximum number of child agents this agent can spawn")
 
 class AgentCreate(AgentBase):
     """Agent creation model."""
-    pass
+    capabilities: Optional[List[str]] = Field(default_factory=list, description="Agent capabilities")
+    config: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Agent configuration")
+
+class Agent(BaseModel):
+    """Internal agent model for storage."""
+    id: str = Field(..., description="Unique agent identifier")
+    workflow_id: str = Field(..., description="Workflow ID this agent belongs to")
+    name: str = Field(..., description="Agent name")
+    description: Optional[str] = Field(None, description="Agent description")
+    agent_type: str = Field("general_agent", description="Agent type")
+    status: AgentStatusEnum = Field(AgentStatusEnum.IDLE, description="Agent status")
+    status_description: str = Field("Agent is idle", description="Detailed description of current status")
+    status_updated_at: datetime = Field(default_factory=datetime.now, description="When status was last updated")
+    created_at: datetime = Field(default_factory=datetime.now, description="Agent creation timestamp")
+    last_activity: Optional[datetime] = Field(None, description="Last activity timestamp")
+    tasks: List[Task] = Field(default_factory=list, description="Assigned tasks")
+    child_agents: List[str] = Field(default_factory=list, description="List of child agent IDs")
+    parent_agent_id: Optional[str] = Field(None, description="Parent agent ID (for child agents)")
+    connected_agents: List[str] = Field(default_factory=list, description="List of connected agent IDs")
+    capabilities: List[str] = Field(default_factory=list, description="Agent capabilities")
+    config: Dict[str, Any] = Field(default_factory=dict, description="Agent configuration")
+    llm_config: Optional[LLMConfig] = Field(None, description="LLM configuration")
+    max_child_agents: int = Field(5, ge=0, description="Maximum number of child agents this agent can spawn")
 
 class AgentResponse(AgentBase):
     """Agent response model."""
@@ -88,6 +116,8 @@ class AgentResponse(AgentBase):
     connected_agents: List[str] = Field(default_factory=list, description="List of connected agent IDs")
     child_agents: List[str] = Field(default_factory=list, description="List of child agent IDs")
     tasks: List[Task] = Field(default_factory=list, description="Assigned tasks (for future use)")
+    capabilities: List[str] = Field(default_factory=list, description="Agent capabilities")
+    config: Dict[str, Any] = Field(default_factory=dict, description="Agent configuration")
 
 class AgentList(BaseModel):
     """Agent list response model."""
@@ -98,6 +128,14 @@ class AgentConnection(BaseModel):
     """Agent connection model."""
     target_agent_id: str = Field(..., description="Target agent ID to connect to")
     connection_type: str = Field("delegation", description="Type of connection")
+
+# Task Update model
+class TaskUpdate(BaseModel):
+    """Task update model."""
+    title: Optional[str] = Field(None, description="Updated task title")
+    description: Optional[str] = Field(None, description="Updated task description")
+    status: Optional[str] = Field(None, description="Updated task status")
+    priority: Optional[int] = Field(None, ge=1, le=5, description="Updated task priority")
 
 class TaskDelegation(BaseModel):
     """Task delegation model."""
