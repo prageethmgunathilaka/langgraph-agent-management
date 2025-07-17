@@ -1,6 +1,8 @@
 import json
 from mangum import Mangum
-from src.main import app
+
+# Import the correct app from the app directory
+from app.main import app
 
 # Create the Mangum handler for AWS Lambda
 handler = Mangum(app, lifespan="off")

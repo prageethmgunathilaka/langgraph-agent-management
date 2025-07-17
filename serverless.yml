@@ -5,7 +5,7 @@ provider:
   runtime: python3.9
   region: us-east-1
   stage: ${opt:stage, 'dev'}
-  memorySize: 512
+  memorySize: 1024
   timeout: 30
   environment:
     STAGE: ${self:provider.stage}
@@ -28,4 +28,33 @@ custom:
   pythonRequirements:
     dockerizePip: true
     slim: true
-    strip: false 
+    strip: false
+    useDownloadCache: true
+    useStaticCache: true
+    fileName: requirements-lambda.txt
+    noDeploy:
+      - boto3
+      - botocore
+      - docutils
+      - jmespath
+      - python-dateutil
+      - s3transfer
+      - six
+      - urllib3
+
+package:
+  patterns:
+    - '!node_modules/**'
+    - '!.git/**'
+    - '!.pytest_cache/**'
+    - '!tests/**'
+    - '!venv/**'
+    - '!.venv/**'
+    - '!__pycache__/**'
+    - '!*.pyc'
+    - '!.env'
+    - '!deploy-aws.md'
+    - '!README.md'
+    - '!SESSION_NOTES.md'
+    - '!PROJECT_STATUS.md'
+    - '!TASKMASTER_STATUS.md' 

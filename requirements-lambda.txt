@@ -1,0 +1,16 @@
+# Minimal requirements for Lambda deployment - only what we actually use
+fastapi==0.104.1
+uvicorn==0.24.0
+pydantic==2.4.2
+python-multipart==0.0.6
+mangum==0.17.0
+
+# HTTP client
+httpx==0.25.2
+
+# Environment
+python-dotenv==1.0.0
+pydantic-settings==2.0.3
+
+# System monitoring (lightweight)
+psutil==5.9.6 
