@@ -15,6 +15,7 @@ import uuid
 from ..models.schemas import Task, TaskCreate, TaskUpdate, Agent
 from .llm_service import LLMService, LLMServiceFactory, InferenceType
 from .agent_service import AgentService
+from .persistence_service import PersistenceService, PersistenceConfig
 
 logger = logging.getLogger(__name__)
 
@@ -74,13 +75,18 @@ class WorkflowPlan:
 class TaskService:
     """Enhanced task service with LLM integration and intelligent execution"""
     
-    def __init__(self, agent_service: AgentService, llm_service: Optional[LLMService] = None):
+    def __init__(self, agent_service: AgentService, llm_service: Optional[LLMService] = None, 
+                 persistence_service: Optional[PersistenceService] = None):
         self.agent_service = agent_service
         self.llm_service = llm_service or self._initialize_llm_service()
+        self.persistence_service = persistence_service or PersistenceService()
         self.task_executions: Dict[str, TaskExecution] = {}
         self.workflow_plans: Dict[str, WorkflowPlan] = {}
         self.task_dependencies: Dict[str, Set[str]] = {}
         self.running_tasks: Set[str] = set()
+        
+        # Load existing data from persistence
+        asyncio.create_task(self._load_persisted_data())
         
     def _initialize_llm_service(self) -> Optional[LLMService]:
         """Initialize LLM service from environment if available"""
@@ -89,6 +95,39 @@ class TaskService:
         except Exception as e:
             logger.warning(f"Could not initialize LLM service: {e}")
             return None
+    
+    async def _load_persisted_data(self):
+        """Load existing data from persistence layer"""
+        try:
+            # Load running tasks
+            running_tasks = await self.persistence_service.get_tasks_by_status(TaskStatus.RUNNING)
+            for task in running_tasks:
+                self.task_executions[task.task_id] = task
+                self.running_tasks.add(task.task_id)
+            
+            # Load pending tasks
+            pending_tasks = await self.persistence_service.get_tasks_by_status(TaskStatus.PENDING)
+            for task in pending_tasks:
+                self.task_executions[task.task_id] = task
+            
+            logger.info(f"Loaded {len(running_tasks)} running tasks and {len(pending_tasks)} pending tasks from persistence")
+            
+        except Exception as e:
+            logger.error(f"Failed to load persisted data: {e}")
+    
+    async def _persist_task_execution(self, execution: TaskExecution):
+        """Persist task execution to storage"""
+        try:
+            await self.persistence_service.save_task_execution(execution)
+        except Exception as e:
+            logger.error(f"Failed to persist task execution {execution.task_id}: {e}")
+    
+    async def _persist_workflow_plan(self, plan: WorkflowPlan):
+        """Persist workflow plan to storage"""
+        try:
+            await self.persistence_service.save_workflow_plan(plan)
+        except Exception as e:
+            logger.error(f"Failed to persist workflow plan {plan.workflow_id}: {e}")
     
     # Planning Phase Methods
     
@@ -117,8 +156,9 @@ class TaskService:
                 estimated_duration=self._estimate_duration(plan_data.get("steps", []))
             )
             
-            # Store the workflow plan
+            # Store and persist the workflow plan
             self.workflow_plans[workflow_plan.workflow_id] = workflow_plan
+            await self._persist_workflow_plan(workflow_plan)
             
             # Create task dependencies from steps
             self._create_task_dependencies(workflow_plan.steps)
@@ -289,6 +329,7 @@ class TaskService:
         
         self.task_executions[step_id] = execution
         self.running_tasks.add(step_id)
+        await self._persist_task_execution(execution)
         
         try:
             # Execute the step based on agent type
@@ -298,6 +339,7 @@ class TaskService:
             execution.status = TaskStatus.COMPLETED
             execution.end_time = datetime.now()
             execution.result = result
+            await self._persist_task_execution(execution)
             
             return {
                 "status": "completed",
@@ -309,6 +351,7 @@ class TaskService:
             execution.status = TaskStatus.FAILED
             execution.end_time = datetime.now()
             execution.error = str(e)
+            await self._persist_task_execution(execution)
             raise
             
         finally:
@@ -442,6 +485,7 @@ class TaskService:
                 execution = self.task_executions[task_id]
                 execution.status = TaskStatus.CANCELLED
                 execution.end_time = datetime.now()
+                await self._persist_task_execution(execution)
             
             return True
         

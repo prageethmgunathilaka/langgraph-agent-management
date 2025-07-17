@@ -10,13 +10,15 @@ from app.models.schemas import (
 from app.services.workflow_service import WorkflowService
 from app.services.agent_service import AgentService
 from app.services.task_service import TaskService, IntelligenceLevel
+from app.services.persistence_service import PersistenceService
 
 router = APIRouter()
 
 # Initialize services
 workflow_service = WorkflowService()
 agent_service = AgentService(workflow_service=workflow_service)
-task_service = TaskService(agent_service=agent_service)
+persistence_service = PersistenceService()
+task_service = TaskService(agent_service=agent_service, persistence_service=persistence_service)
 
 # Root endpoint
 @router.get("/", tags=["System"])
@@ -435,4 +437,128 @@ async def get_llm_usage_stats(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get LLM usage stats: {str(e)}"
+        )
+
+
+# Persistence Management Endpoints
+
+@router.get("/persistence/health")
+async def get_persistence_health():
+    """Get persistence service health status."""
+    try:
+        health = await persistence_service.health_check()
+        return health
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to check persistence health: {str(e)}"
+        )
+
+
+@router.get("/persistence/stats")
+async def get_persistence_stats():
+    """Get database statistics."""
+    try:
+        stats = await persistence_service.get_database_stats()
+        return stats
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get persistence stats: {str(e)}"
+        )
+
+
+@router.post("/persistence/backup")
+async def create_backup():
+    """Create a database backup."""
+    try:
+        backup_path = await persistence_service.create_backup()
+        if backup_path:
+            return {"status": "success", "backup_path": backup_path}
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create backup"
+            )
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create backup: {str(e)}"
+        )
+
+
+@router.post("/persistence/restore")
+async def restore_backup(backup_path: str):
+    """Restore database from backup."""
+    try:
+        success = await persistence_service.restore_from_backup(backup_path)
+        if success:
+            return {"status": "success", "message": "Database restored successfully"}
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to restore from backup"
+            )
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to restore backup: {str(e)}"
+        )
+
+
+@router.delete("/persistence/cleanup")
+async def cleanup_old_data(days: int = 30):
+    """Clean up old data older than specified days."""
+    try:
+        success = await persistence_service.cleanup_old_data(days)
+        if success:
+            return {"status": "success", "message": f"Cleaned up data older than {days} days"}
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to cleanup old data"
+            )
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to cleanup old data: {str(e)}"
+        )
+
+
+@router.get("/persistence/metrics/{metric_name}")
+async def get_metrics(metric_name: str, limit: int = 100):
+    """Get system metrics by name."""
+    try:
+        metrics = await persistence_service.get_metrics(metric_name, limit=limit)
+        return metrics
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get metrics: {str(e)}"
+        )
+
+
+@router.post("/persistence/metrics")
+async def record_metric(metric_name: str, metric_value: float, metadata: Optional[Dict[str, Any]] = None):
+    """Record a system metric."""
+    try:
+        success = await persistence_service.record_metric(metric_name, metric_value, metadata)
+        if success:
+            return {"status": "success", "message": "Metric recorded successfully"}
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to record metric"
+            )
+            
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to record metric: {str(e)}"
         ) 
