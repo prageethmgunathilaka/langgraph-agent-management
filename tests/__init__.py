@@ -1,1 +1,1 @@
-"""Test suite for FastAPI Skeleton.""" 
+"""Test suite for FastAPI Skeleton."""

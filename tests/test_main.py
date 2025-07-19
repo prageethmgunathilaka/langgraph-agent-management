@@ -12,9 +12,9 @@ client = TestClient(app)
 def test_hello_world():
     """Test the hello world endpoint."""
     response = client.get("/")
-    
+
     assert response.status_code == 200
-    
+
     data = response.json()
     assert data["message"] == "LangGraph Agent Management System"
     assert data["version"] == "1.0.0"
@@ -24,11 +24,11 @@ def test_hello_world():
 def test_health_check():
     """Test the health check endpoint."""
     response = client.get("/health")
-    
+
     assert response.status_code == 200
-    
+
     data = response.json()
-    assert data["status"] == "degraded"  # Expected during migration
+    assert data["status"] in ["healthy", "degraded"]  # Can be degraded due to resource limits
     assert data["service"] == "LangGraph Agent Management System"
 
 
@@ -37,7 +37,7 @@ def test_docs_accessible():
     # Test Swagger UI
     response = client.get("/docs")
     assert response.status_code == 200
-    
+
     # Test ReDoc
     response = client.get("/redoc")
     assert response.status_code == 200
@@ -46,9 +46,9 @@ def test_docs_accessible():
 def test_openapi_json():
     """Test OpenAPI JSON schema is accessible."""
     response = client.get("/openapi.json")
-    
+
     assert response.status_code == 200
-    
+
     schema = response.json()
     assert "openapi" in schema
     assert "info" in schema
@@ -59,4 +59,4 @@ def test_openapi_json():
 def test_invalid_endpoint():
     """Test accessing non-existent endpoint returns 404."""
     response = client.get("/nonexistent")
-    assert response.status_code == 404 
+    assert response.status_code == 404

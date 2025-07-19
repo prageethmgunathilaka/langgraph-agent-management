@@ -19,12 +19,14 @@ langgraph_service = LangGraphService()
 
 class WorkflowRequest(BaseModel):
     """Request to create a workflow"""
+
     request: str
     intelligence_level: str = "basic"
 
 
 class WorkflowResponse(BaseModel):
     """Response from workflow creation"""
+
     workflow_id: str
     status: str
     message: str
@@ -38,23 +40,13 @@ async def create_workflow(request: WorkflowRequest):
         try:
             intelligence_level = IntelligenceLevel(request.intelligence_level)
         except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid intelligence level: {request.intelligence_level}"
-            )
-        
+            raise HTTPException(status_code=400, detail=f"Invalid intelligence level: {request.intelligence_level}")
+
         # Create workflow
-        workflow_id = await langgraph_service.create_workflow_from_request(
-            request.request,
-            intelligence_level
-        )
-        
-        return WorkflowResponse(
-            workflow_id=workflow_id,
-            status="created",
-            message=f"Workflow created successfully"
-        )
-        
+        workflow_id = await langgraph_service.create_workflow_from_request(request.request, intelligence_level)
+
+        return WorkflowResponse(workflow_id=workflow_id, status="created", message=f"Workflow created successfully")
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -64,13 +56,9 @@ async def execute_workflow(workflow_id: str):
     """Execute a workflow"""
     try:
         results = await langgraph_service.execute_workflow(workflow_id)
-        
-        return {
-            "workflow_id": workflow_id,
-            "status": "completed",
-            "results": results
-        }
-        
+
+        return {"workflow_id": workflow_id, "status": "completed", "results": results}
+
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -83,7 +71,7 @@ async def get_workflow_status(workflow_id: str):
     try:
         status = await langgraph_service.get_workflow_status(workflow_id)
         return status
-        
+
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -95,13 +83,13 @@ async def cancel_workflow(workflow_id: str):
     """Cancel a running workflow"""
     try:
         success = await langgraph_service.cancel_workflow(workflow_id)
-        
+
         return {
             "workflow_id": workflow_id,
             "status": "cancelled" if success else "failed",
-            "message": "Workflow cancelled successfully" if success else "Failed to cancel workflow"
+            "message": "Workflow cancelled successfully" if success else "Failed to cancel workflow",
         }
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -112,7 +100,7 @@ async def get_system_metrics():
     try:
         metrics = langgraph_service.get_system_metrics()
         return metrics
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -125,28 +113,22 @@ async def quick_execute(request: WorkflowRequest):
         try:
             intelligence_level = IntelligenceLevel(request.intelligence_level)
         except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid intelligence level: {request.intelligence_level}"
-            )
-        
+            raise HTTPException(status_code=400, detail=f"Invalid intelligence level: {request.intelligence_level}")
+
         # Create workflow
-        workflow_id = await langgraph_service.create_workflow_from_request(
-            request.request,
-            intelligence_level
-        )
-        
+        workflow_id = await langgraph_service.create_workflow_from_request(request.request, intelligence_level)
+
         # Execute immediately
         results = await langgraph_service.execute_workflow(workflow_id)
-        
+
         return {
             "workflow_id": workflow_id,
             "status": "completed",
             "request": request.request,
             "intelligence_level": request.intelligence_level,
-            "results": results
+            "results": results,
         }
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -157,16 +139,8 @@ async def health_check():
     """Health check for LangGraph service"""
     try:
         metrics = langgraph_service.get_system_metrics()
-        
-        return {
-            "status": "healthy",
-            "service": "LangGraph Agent Management",
-            "version": "2.0.0",
-            "metrics": metrics
-        }
-        
+
+        return {"status": "healthy", "service": "LangGraph Agent Management", "version": "2.0.0", "metrics": metrics}
+
     except Exception as e:
-        return {
-            "status": "unhealthy",
-            "error": str(e)
-        } 
+        return {"status": "unhealthy", "error": str(e)}

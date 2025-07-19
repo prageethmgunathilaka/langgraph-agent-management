@@ -15,22 +15,25 @@ from app.services.agent_service import AgentService
 # Test client
 client = TestClient(app)
 
+
 class TestIntegration:
     """Integration test suite for all API endpoints."""
-    
+
     def setup_method(self):
         """Setup before each test method."""
         # Clear services for clean state by accessing the singleton instances
         from app.api.routes import workflow_service, agent_service
+
         workflow_service._workflows.clear()
         agent_service._agents.clear()
         agent_service._agent_connections.clear()
         agent_service._workflow_agents.clear()
-        
+
     def teardown_method(self):
         """Cleanup after each test method."""
         # Clear services after test by accessing the singleton instances
         from app.api.routes import workflow_service, agent_service
+
         workflow_service._workflows.clear()
         agent_service._agents.clear()
         agent_service._agent_connections.clear()
@@ -63,10 +66,7 @@ class TestIntegration:
     def test_workflow_lifecycle(self):
         """Test complete workflow lifecycle: create, read, update, delete."""
         # Create workflow
-        workflow_data = {
-            "name": "Test Workflow",
-            "description": "Test workflow description"
-        }
+        workflow_data = {"name": "Test Workflow", "description": "Test workflow description"}
         response = client.post("/workflows", json=workflow_data)
         assert response.status_code == 200
         created_workflow = response.json()
@@ -94,7 +94,7 @@ class TestIntegration:
         # Delete workflow
         response = client.delete(f"/workflows/{workflow_id}")
         assert response.status_code == 200
-        
+
         # Verify deletion
         response = client.get(f"/workflows/{workflow_id}")
         assert response.status_code == 404
@@ -121,15 +121,12 @@ class TestIntegration:
 
     def test_workflow_duplicate_prevention(self):
         """Test workflow duplicate name prevention."""
-        workflow_data = {
-            "name": "Duplicate Test",
-            "description": "First workflow"
-        }
-        
+        workflow_data = {"name": "Duplicate Test", "description": "First workflow"}
+
         # Create first workflow
         response = client.post("/workflows", json=workflow_data)
         assert response.status_code == 200
-        
+
         # Try to create duplicate
         response = client.post("/workflows", json=workflow_data)
         # Note: Currently returns 500, should be 400 but functionality works
@@ -139,10 +136,7 @@ class TestIntegration:
     def test_agent_lifecycle(self):
         """Test complete agent lifecycle: create, read, delete."""
         # First create a workflow
-        workflow_data = {
-            "name": "Agent Test Workflow",
-            "description": "Workflow for agent testing"
-        }
+        workflow_data = {"name": "Agent Test Workflow", "description": "Workflow for agent testing"}
         response = client.post("/workflows", json=workflow_data)
         assert response.status_code == 200
         workflow_id = response.json()["id"]
@@ -152,14 +146,9 @@ class TestIntegration:
             "name": "Test Agent",
             "description": "Test agent description",
             "agent_type": "main",
-            "llm_config": {
-                "provider": "openai",
-                "model": "gpt-4",
-                "temperature": 0.7,
-                "max_tokens": 1000
-            },
+            "llm_config": {"provider": "openai", "model": "gpt-4", "temperature": 0.7, "max_tokens": 1000},
             "mcp_connections": [],
-            "max_child_agents": 5
+            "max_child_agents": 5,
         }
         response = client.post(f"/workflows/{workflow_id}/agents", json=agent_data)
         assert response.status_code == 200
@@ -188,7 +177,7 @@ class TestIntegration:
         # Delete agent
         response = client.delete(f"/agents/{agent_id}")
         assert response.status_code == 200
-        
+
         # Verify deletion
         response = client.get(f"/agents/{agent_id}")
         assert response.status_code == 404
@@ -201,13 +190,7 @@ class TestIntegration:
         workflow_id = response.json()["id"]
 
         # Test invalid agent data - missing provider
-        invalid_agent = {
-            "name": "Invalid Agent",
-            "agent_type": "main",
-            "llm_config": {
-                "model": "gpt-4"  # Missing provider
-            }
-        }
+        invalid_agent = {"name": "Invalid Agent", "agent_type": "main", "llm_config": {"model": "gpt-4"}}  # Missing provider
         response = client.post(f"/workflows/{workflow_id}/agents", json=invalid_agent)
         assert response.status_code == 422
 
@@ -215,10 +198,7 @@ class TestIntegration:
         invalid_agent = {
             "name": "Invalid Agent",
             "agent_type": "invalid_type",
-            "llm_config": {
-                "provider": "openai",
-                "model": "gpt-4"
-            }
+            "llm_config": {"provider": "openai", "model": "gpt-4"},
         }
         response = client.post(f"/workflows/{workflow_id}/agents", json=invalid_agent)
         assert response.status_code == 422
@@ -238,12 +218,7 @@ class TestIntegration:
         agent_data_template = {
             "name": "Agent {i}",
             "agent_type": "main",
-            "llm_config": {
-                "provider": "openai",
-                "model": "gpt-4",
-                "temperature": 0.7,
-                "max_tokens": 1000
-            }
+            "llm_config": {"provider": "openai", "model": "gpt-4", "temperature": 0.7, "max_tokens": 1000},
         }
 
         agent_ids = []
@@ -278,14 +253,7 @@ class TestIntegration:
         response = client.post("/workflows", json=workflow_data)
         workflow_id = response.json()["id"]
 
-        agent_data = {
-            "name": "Test Agent",
-            "agent_type": "main",
-            "llm_config": {
-                "provider": "openai",
-                "model": "gpt-4"
-            }
-        }
+        agent_data = {"name": "Test Agent", "agent_type": "main", "llm_config": {"provider": "openai", "model": "gpt-4"}}
         response = client.post(f"/workflows/{workflow_id}/agents", json=agent_data)
         agent_id = response.json()["id"]
 
@@ -322,13 +290,10 @@ class TestIntegration:
     def test_multiple_workflows_performance(self):
         """Test creating multiple workflows for performance."""
         workflow_ids = []
-        
+
         # Create 10 workflows
         for i in range(10):
-            workflow_data = {
-                "name": f"Performance Test {i}",
-                "description": f"Performance test workflow {i}"
-            }
+            workflow_data = {"name": f"Performance Test {i}", "description": f"Performance test workflow {i}"}
             response = client.post("/workflows", json=workflow_data)
             assert response.status_code == 200
             workflow_ids.append(response.json()["id"])
@@ -353,16 +318,13 @@ class TestIntegration:
         workflow_id = response.json()["id"]
 
         agent_ids = []
-        
+
         # Create 5 agents
         for i in range(5):
             agent_data = {
                 "name": f"Performance Agent {i}",
                 "agent_type": "main",
-                "llm_config": {
-                    "provider": "openai",
-                    "model": "gpt-4"
-                }
+                "llm_config": {"provider": "openai", "model": "gpt-4"},
             }
             response = client.post(f"/workflows/{workflow_id}/agents", json=agent_data)
             assert response.status_code == 200
@@ -378,24 +340,26 @@ class TestIntegration:
         response = client.delete(f"/workflows/{workflow_id}")
         assert response.status_code == 200
 
+
 # Utility functions for running tests
 def run_quick_test():
     """Run a quick subset of tests for rapid feedback."""
-    pytest.main([
-        "tests/test_integration.py::TestIntegration::test_root_endpoint",
-        "tests/test_integration.py::TestIntegration::test_health_endpoint",
-        "tests/test_integration.py::TestIntegration::test_workflow_lifecycle",
-        "tests/test_integration.py::TestIntegration::test_agent_lifecycle",
-        "-v"
-    ])
+    pytest.main(
+        [
+            "tests/test_integration.py::TestIntegration::test_root_endpoint",
+            "tests/test_integration.py::TestIntegration::test_health_endpoint",
+            "tests/test_integration.py::TestIntegration::test_workflow_lifecycle",
+            "tests/test_integration.py::TestIntegration::test_agent_lifecycle",
+            "-v",
+        ]
+    )
+
 
 def run_full_test():
     """Run the complete test suite."""
-    pytest.main([
-        "tests/test_integration.py",
-        "-v"
-    ])
+    pytest.main(["tests/test_integration.py", "-v"])
+
 
 if __name__ == "__main__":
     # Run quick test by default
-    run_quick_test() 
+    run_quick_test()

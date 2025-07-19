@@ -6,11 +6,7 @@ from app.api.routes import router
 from app.api.langgraph_routes import router as langgraph_router
 from app.utils.logger import setup_logging
 from app.utils.config import get_settings
-from app.utils.errors import (
-    BaseAppException, 
-    app_exception_handler, 
-    general_exception_handler
-)
+from app.utils.errors import BaseAppException, app_exception_handler, general_exception_handler
 
 # Initialize logging
 setup_logging()
@@ -66,13 +62,17 @@ app.add_exception_handler(Exception, general_exception_handler)
 app.include_router(router)
 app.include_router(langgraph_router)
 
+
 # Health check endpoint
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Health check endpoint."""
     from app.utils.helpers import create_health_check_response
+
     return create_health_check_response()
+
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True) 
+
+    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
