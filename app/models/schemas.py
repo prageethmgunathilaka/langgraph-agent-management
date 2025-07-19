@@ -31,6 +31,21 @@ class WorkflowStatus(str, Enum):
     COMPLETED = "completed"
     ERROR = "error"
 
+class TaskStatus(str, Enum):
+    """Task status enumeration."""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+class IntelligenceLevel(str, Enum):
+    """Intelligence level for task execution."""
+    BASIC = "basic"          # No LLM access, predefined logic only
+    ADAPTIVE = "adaptive"    # LLM access for error recovery only
+    INTELLIGENT = "intelligent"  # LLM access for decisions and adaptations
+    AUTONOMOUS = "autonomous"    # Full LLM access for planning and execution
+
 # LLM Configuration
 class LLMConfig(BaseModel):
     """LLM configuration model."""
@@ -72,7 +87,7 @@ class AgentBase(BaseModel):
     """Base agent model."""
     name: str = Field(..., description="Agent name")
     description: Optional[str] = Field(None, description="Agent description")
-    agent_type: str = Field("general_agent", description="Agent type")
+    agent_type: AgentType = Field(AgentType.MAIN, description="Agent type")
     llm_config: Optional[LLMConfig] = Field(None, description="LLM configuration")
     mcp_connections: List[MCPConnection] = Field(default_factory=list, description="MCP server connections")
     max_child_agents: int = Field(5, ge=0, description="Maximum number of child agents this agent can spawn")
@@ -88,7 +103,7 @@ class Agent(BaseModel):
     workflow_id: str = Field(..., description="Workflow ID this agent belongs to")
     name: str = Field(..., description="Agent name")
     description: Optional[str] = Field(None, description="Agent description")
-    agent_type: str = Field("general_agent", description="Agent type")
+    agent_type: AgentType = Field(AgentType.MAIN, description="Agent type")
     status: AgentStatusEnum = Field(AgentStatusEnum.IDLE, description="Agent status")
     status_description: str = Field("Agent is idle", description="Detailed description of current status")
     status_updated_at: datetime = Field(default_factory=datetime.now, description="When status was last updated")
@@ -182,6 +197,33 @@ class WorkflowResponse(WorkflowBase):
     id: str = Field(..., description="Unique workflow identifier")
     status: WorkflowStatus = Field(WorkflowStatus.ACTIVE, description="Workflow status")
     created_at: datetime = Field(default_factory=datetime.now, description="Workflow creation timestamp")
+    last_modified: datetime = Field(default_factory=datetime.now, description="Last modification timestamp")
+    agent_count: int = Field(0, description="Number of agents in this workflow")
+    agents: List[AgentResponse] = Field(default_factory=list, description="List of agents in this workflow")
+
+# Task execution models for persistence
+class TaskExecution(BaseModel):
+    """Task execution data model."""
+    task_id: str = Field(..., description="Task identifier")
+    workflow_id: str = Field(..., description="Workflow identifier")
+    agent_id: str = Field(..., description="Agent identifier")
+    status: TaskStatus = Field(TaskStatus.PENDING, description="Task status")
+    intelligence_level: IntelligenceLevel = Field(IntelligenceLevel.BASIC, description="Intelligence level")
+    task_data: Dict[str, Any] = Field(default_factory=dict, description="Task data")
+    result: Optional[Dict[str, Any]] = Field(None, description="Task result")
+    error: Optional[str] = Field(None, description="Error message if failed")
+    started_at: Optional[datetime] = Field(None, description="Task start time")
+    completed_at: Optional[datetime] = Field(None, description="Task completion time")
+    created_at: datetime = Field(default_factory=datetime.now, description="Task creation time")
+
+class WorkflowPlan(BaseModel):
+    """Workflow plan data model."""
+    workflow_id: str = Field(..., description="Workflow identifier")
+    title: str = Field(..., description="Workflow title")
+    description: str = Field(..., description="Workflow description")
+    steps: List[Dict[str, Any]] = Field(default_factory=list, description="Workflow steps")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Additional metadata")
+    created_at: datetime = Field(default_factory=datetime.now, description="Plan creation time")
     last_modified: datetime = Field(default_factory=datetime.now, description="Last modification timestamp")
     agent_count: int = Field(0, description="Number of agents in this workflow")
     agents: List[AgentResponse] = Field(default_factory=list, description="List of agents in this workflow")

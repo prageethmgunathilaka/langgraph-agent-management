@@ -474,28 +474,7 @@ class AgentService(LoggerMixin):
             if agent:
                 # Update connected agents list
                 agent.connected_agents = self._agent_connections.get(agent_id, [])
-                # Convert Agent to AgentResponse
-                agent_response = AgentResponse(
-                    id=agent.id,
-                    workflow_id=agent.workflow_id,
-                    name=agent.name,
-                    description=agent.description,
-                    agent_type=agent.agent_type,
-                    status=agent.status,
-                    status_description=agent.status_description,
-                    status_updated_at=agent.status_updated_at,
-                    created_at=agent.created_at,
-                    last_activity=agent.last_activity,
-                    parent_agent_id=agent.parent_agent_id,
-                    connected_agents=agent.connected_agents,
-                    child_agents=agent.child_agents,
-                    tasks=agent.tasks,
-                    capabilities=agent.capabilities,
-                    config=agent.config,
-                    llm_config=agent.llm_config,
-                    max_child_agents=agent.max_child_agents
-                )
-                agents.append(agent_response)
+                agents.append(agent)
         
         # Sort by creation date (newest first)
         agents.sort(key=lambda a: a.created_at, reverse=True)

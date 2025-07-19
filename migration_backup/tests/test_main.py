@@ -3,7 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
+from src.main import app
 
 # Create test client
 client = TestClient(app)
@@ -16,9 +16,8 @@ def test_hello_world():
     assert response.status_code == 200
     
     data = response.json()
-    assert data["message"] == "LangGraph Agent Management System"
-    assert data["version"] == "1.0.0"
-    assert data["status"] == "operational"
+    assert data["message"] == "Hello, World!"
+    assert data["service"] == "FastGraph"
 
 
 def test_health_check():
@@ -28,8 +27,8 @@ def test_health_check():
     assert response.status_code == 200
     
     data = response.json()
-    assert data["status"] == "degraded"  # Expected during migration
-    assert data["service"] == "LangGraph Agent Management System"
+    assert data["status"] == "healthy"
+    assert data["service"] == "FastGraph"
 
 
 def test_docs_accessible():
@@ -52,7 +51,7 @@ def test_openapi_json():
     schema = response.json()
     assert "openapi" in schema
     assert "info" in schema
-    assert schema["info"]["title"] == "LangGraph Agent Management System"
+    assert schema["info"]["title"] == "FastGraph"
     assert schema["info"]["version"] == "0.1.0"
 
 
