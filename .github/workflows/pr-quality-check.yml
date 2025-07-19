@@ -1,0 +1,62 @@
+name: 🔍 PR Quality Check
+
+on:
+  pull_request:
+    branches: [ main, master, develop ]
+    types: [opened, synchronize, reopened]
+
+env:
+  PYTHON_VERSION: '3.13'
+
+jobs:
+  # Quick quality checks for PR
+  pr-quality:
+    name: 🚀 PR Quality Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 🔄 Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: 📦 Install Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install flake8 black isort pytest-cov aiofiles
+
+    - name: 🎨 Code Formatting Check
+      run: |
+        echo "Checking code formatting with Black..."
+        black --check --diff .
+        
+        echo "Checking import sorting with isort..."
+        isort --check-only --diff .
+
+    - name: 🔍 Linting Check
+      run: |
+        echo "Running flake8 linting..."
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
+
+    - name: 🧪 Run Core Tests
+      run: |
+        echo "Running core test suite..."
+        python -m pytest tests/test_main.py tests/test_integration.py tests/test_agent.py -v --tb=short --cov=app --cov-report=term-missing
+
+    - name: 📊 PR Quality Summary
+      run: |
+        echo "## 🎯 PR Quality Check Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Code formatting passed" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Linting checks passed" >> $GITHUB_STEP_SUMMARY
+        echo "✅ Core tests passed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**PR is ready for review!** 🚀" >> $GITHUB_STEP_SUMMARY 

@@ -1,53 +1,228 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
-name = "fastgraph"
-version = "0.1.0"
-description = "A minimal FastAPI microservice skeleton"
+name = "langgraph-agent-system"
+version = "1.0.0"
+description = "LangGraph Multi-Agent Orchestration System"
+authors = [{name = "LangGraph Team", email = "team@langgraph.com"}]
+license = {text = "MIT"}
 readme = "README.md"
-requires-python = ">=3.9"
-authors = [
-    {name = "Prageeth", email = "prageeth@example.com"},
-]
+requires-python = ">=3.11"
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.12", 
+    "Programming Language :: Python :: 3.13",
 ]
-
 dependencies = [
     "fastapi>=0.104.0",
     "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.5.0",
+    "langgraph>=0.2.0",
+    "langchain>=0.3.0",
+    "langchain-openai>=0.2.0",
+    "aiofiles>=23.2.1",
+    "python-multipart>=0.0.6",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",
-    "httpx>=0.25.0",  # Required for TestClient
-    "black>=23.0.0",
-    "isort>=5.12.0",
-    "flake8>=6.0.0",
+    "pytest-cov>=4.1.0",
+    "pytest-html>=4.1.0",
+    "pytest-json-report>=1.5.0",
+    "pytest-xdist>=3.5.0",
+    "black>=23.12.0",
+    "isort>=5.13.0",
+    "flake8>=7.0.0",
+    "mypy>=1.8.0",
+    "bandit>=1.7.5",
+    "safety>=2.3.0",
+    "pylint>=3.0.0",
+    "radon>=6.0.1",
+    "memory-profiler>=0.61.0",
+    "pytest-benchmark>=4.0.0",
 ]
 
-[tool.hatch.build.targets.wheel]
-packages = ["src"]
+[project.urls]
+Homepage = "https://github.com/yourusername/langgraph"
+Repository = "https://github.com/yourusername/langgraph.git"
+Issues = "https://github.com/yourusername/langgraph/issues"
+
+# Quality Tool Configurations
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+    "--cov=app",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+    "--cov-fail-under=70",
+]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests",
+    "performance: marks tests as performance tests",
+]
+asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "*/tests/*",
+    "*/venv/*",
+    "*/.venv/*",
+    "*/site-packages/*",
+    "__pycache__/*",
+]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if settings.DEBUG",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "class .*\\bProtocol\\):",
+    "@(abc\\.)?abstractmethod",
+]
+show_missing = true
+precision = 2
 
 [tool.black]
-line-length = 88
-target-version = ['py39']
+line-length = 127
+target-version = ['py311', 'py312', 'py313']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
 
 [tool.isort]
 profile = "black"
-line_length = 88
+multi_line_output = 3
+line_length = 127
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+src_paths = ["app", "tests"]
+skip_glob = ["*/.venv/*", "*/venv/*"]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["src"]
-addopts = "-v" 
+[tool.flake8]
+max-line-length = 127
+max-complexity = 10
+select = ["E", "W", "F", "C"]
+ignore = [
+    "E203",  # whitespace before ':'
+    "E501",  # line too long (handled by black)
+    "W503",  # line break before binary operator
+    "W504",  # line break after binary operator
+]
+exclude = [
+    ".git",
+    "__pycache__",
+    ".venv",
+    "venv",
+    ".eggs",
+    "*.egg",
+    "build",
+    "dist",
+]
+per-file-ignores = [
+    "__init__.py:F401",  # imported but unused
+    "tests/*:F401,F811",  # test files can have imports and redefinitions
+]
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false  # Set to false for gradual typing
+disallow_incomplete_defs = false
+check_untyped_defs = true
+disallow_untyped_decorators = false
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = [
+    "langgraph.*",
+    "langchain.*",
+    "uvicorn.*",
+    "pytest.*",
+    "aiofiles.*",
+]
+ignore_missing_imports = true
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", "venv"]
+skips = ["B101", "B601"]  # Skip assert_used and shell_injection for tests
+
+[tool.pylint.main]
+load-plugins = ["pylint.extensions.docparams"]
+jobs = 0  # Use all available processors
+
+[tool.pylint.messages_control]
+disable = [
+    "missing-docstring",
+    "too-few-public-methods",
+    "too-many-arguments",
+    "too-many-locals",
+    "too-many-branches",
+    "too-many-statements",
+    "duplicate-code",
+    "import-error",
+    "no-name-in-module",
+]
+
+[tool.pylint.format]
+max-line-length = 127
+
+[tool.pylint.design]
+max-args = 10
+max-locals = 20
+max-returns = 10
+max-branches = 15
+max-statements = 60 
