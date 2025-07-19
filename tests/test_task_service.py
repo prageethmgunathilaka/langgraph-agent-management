@@ -250,6 +250,7 @@ class TestTaskService:
         """Test LLM usage stats when no LLM service is available"""
         # Create TaskService without LLM service
         task_service = TaskService(mock_agent_service, None)
+        task_service.llm_service = None  # Explicitly set to None to bypass initialization
         
         # Execute
         stats = task_service.get_llm_usage_stats()
